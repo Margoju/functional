@@ -9,28 +9,71 @@ currdir = os.getcwd() + "/"
 def generate(params):
     fir = []
     sec = []
-    st = open(currdir + "dft-rhf-param.inp", "r")
+    ats = []
+    st = open(currdir + "tmp_input", "r")
     beg = st.readlines()
     st.close()
     start = beg[:beg.index(" $mndft\n")+1]
-    f_part = "".join(start)
-    f = open(currdir + "tmp_input", "r")
-    text = f.readlines()
-    f.close()
-    part = text[text.index("$mndft\n")+1:text.index("$end\n")-1]
-    part2 = text[text.index("$end\n")-1:-1]
+    for i in start:
+        if len(re.findall("%\w+%", i)) > 0:
+            i = re.sub("%\w+%", "{}", i)
+        fir.append(i)
+    f_part = "".join(fir)
+    part = beg[beg.index(" $mndft\n")+1:beg.index(" $end\n")-1]
+    search = beg[beg.index(" $end\n")-1]
+    if search == "  ASMX=.T.\n":
+        del part[1:7]
+        del params[1:7]
     for i in range(len(params)):
         result = re.sub("%\w+%", str(params[i]), part[i])
-        sec.append("  " + result)
-    s_part = "".join(sec)
-    fin_part = "".join(part2)
-    for f in glob.glob(currdir + "MGAE109" + "/*.g09"):
-        print(f) 
-    alls = f_part + s_part + fin_part
-    
+        sec.append(result)
+    s_part = "".join(sec)    
+    pars = (f_part + s_part + search + " $end\n $data\n")
+
+    at = open(currdir + "mg3s.gbs", "r")
+    all_text = at.readlines()
+    at.close()
+    for l in all_text:
+        res = re.match("-\w.", l)
+        if res != None:
+            ats.append(res.group(0).replace("-", "").replace(" ", ""))
+    nums = [str(float(i)) for i in range(1,19)]
+    nums.append("40.0")
+    dic = dict(zip(ats, nums))
+
+    for f in glob.glob(currdir + "MGAE109" + "/*.xyz"):
+        name = f.split('/')[-1].split(".")[0]
+        mc = open(f[:-3] + "g09", "r")
+        multch = mc.readlines()
+        ind = [x for x in multch if len(re.findall("\d \d", x)) > 0][0].split()
+        mc.close()
+        if ind[1] == '1':
+            scftyp = "RHF"
+        else:
+            scftyp = "UHF"
+        pars = pars.format(scftyp, ind[1], ind[0], "HUCKEL")
+        fin = open(f, "r")
+        xyz = fin.readlines()[2:]
+        fin.close()
+        stroc = [s for s in xyz if len(re.findall("\w.", s)) > 0]
+        nach = []
+        for k in stroc:
+            k = k.split()
+            number = dic.get(k[0])
+            k.insert(1, number)
+            pak = " ".join(k)
+            nach.append(pak)
+        geom = "\n".join(nach)
+        alls = (pars + name + "\nC1\n" + geom + "\n $end")
+        fil = open(currdir + "calc/" + name + ".inp", "w")
+        fil.write(alls)
+        fil.close()
         
+        
+
+
 params = [
-  0.27000000000000E+00, 
+  0.27000000000000E+00,
    .13232606370554E+00,
   -.68582715146028E-03,
   0.14901187899946E-01,
